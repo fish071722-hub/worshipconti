@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>콘티 내게 도와줄께!!</title>
+
+<!-- 스마트폰 홈 화면 추가(PWA) 설정 -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1b2a4a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="콘티도우미">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon-180.png">
+
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ 1. 초기화면 (프로젝트 생성 + 기존 곡/콘티) ============ -->
+  <section id="screenHome" class="screen">
+    <div class="home-topbar">
+      <h1>콘티 내게 도와줄께!!</h1>
+    </div>
+    <div class="home-columns">
+      <div class="home-left">
+        <h2>새 프로젝트 만들기</h2>
+        <div class="create-form">
+          <label>날짜
+            <input type="date" id="cpDate">
+          </label>
+          <label>예배 / 모임 종류
+            <select id="cpType"></select>
+          </label>
+          <label id="cpCustomWrap" class="hidden">모임 이름 직접 입력
+            <input type="text" id="cpCustom" placeholder="예: 청년부 수양회">
+          </label>
+          <label>곡 수 (나중에 수정 가능)
+            <input type="number" id="cpSongCount" min="1" max="20" value="1">
+          </label>
+        </div>
+
+        <div class="create-songs-block">
+          <h3>곡 목록</h3>
+          <p class="hint">오른쪽 "기존 곡" 목록에서 곡을 이 목록으로 드래그해 추가할 수 있어요.</p>
+          <ul id="cpSongList" class="cp-song-list"></ul>
+          <button id="cpAddSongBtn" class="btn">＋ 곡 추가</button>
+        </div>
+
+        <div class="create-actions">
+          <button id="cpConfirmBtn" class="btn btn-primary btn-lg">콘티 작업 시작 ▶</button>
+        </div>
+      </div>
+
+      <div class="home-right">
+        <div class="home-right-block">
+          <h3>기존 곡</h3>
+          <div class="lib-filters">
+            <input type="text" id="libFilterTitle" placeholder="제목">
+            <input type="text" id="libFilterKey" placeholder="키">
+            <select id="libFilterTempo">
+              <option value="">속도(전체)</option>
+              <option value="slow">Slow</option>
+              <option value="medium">Medium</option>
+              <option value="fast">Fast</option>
+            </select>
+            <input type="text" id="libFilterLyrics" placeholder="가사 첫줄">
+          </div>
+          <ul id="homeLibraryList" class="entity-list"></ul>
+        </div>
+
+        <div class="home-right-block">
+          <h3>기존 콘티</h3>
+          <input type="text" id="cpSearchProject" placeholder="이름으로 검색">
+          <ul id="cpExistingProjectList" class="entity-list"></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. 콘티 작업 창 ============ -->
+  <section id="screenWorkspace" class="screen hidden">
+    <header class="ws-topbar">
+      <button id="wsHomeBtn" class="btn">◀ 홈으로</button>
+      <strong id="wsProjectName" class="ws-project-name"></strong>
+      <div class="ws-actions">
+        <button id="wsPrintBtn" class="btn btn-primary">🖨 인쇄 미리보기</button>
+        <button id="wsBackupExportBtn" class="btn">백업 내보내기</button>
+        <label class="btn file-btn">백업 가져오기<input type="file" id="wsImportInput" accept="application/json" hidden></label>
+        <span id="saveStatus" class="save-status"></span>
+      </div>
+    </header>
+
+    <div class="slot-tabs" id="slotTabs"></div>
+
+    <div class="song-meta-row">
+      <label>곡 제목 <input type="text" id="songTitleInput" placeholder="곡 제목을 입력하세요"></label>
+      <label>키 <input type="text" id="songKeyInput" placeholder="예: G, D, Capo2" class="key-input"></label>
+      <label>속도
+        <select id="songTempoInput">
+          <option value="">-</option>
+          <option value="slow">Slow</option>
+          <option value="medium">Medium</option>
+          <option value="fast">Fast</option>
+        </select>
+      </label>
+      <label>가사 첫줄 <input type="text" id="songLyricsInput" placeholder="예: 내 영혼이 은총 입어" class="lyrics-input"></label>
+      <button id="wsSaveToScoreBtn" class="btn" title="곡 제목·키·속도·가사 첫줄로 파일명을 만들어 로컬 Score 폴더에 악보 이미지를 저장합니다">💾 Score 폴더에 저장</button>
+      <button id="wsResetSongBtn" class="btn btn-danger" title="악보 이미지는 남기고 마커/진행순서/메트로놈/이미지 크기·위치를 초기화합니다">↺ 초기화</button>
+    </div>
+
+    <div class="workspace-main">
+      <div class="workspace-left">
+        <aside class="pages-panel">
+          <h2>페이지</h2>
+          <div id="pageList" class="page-list"></div>
+          <label class="btn add-page-btn">＋ 이미지 추가
+            <input type="file" id="addImageInput" accept="image/*" multiple hidden>
+          </label>
+          <button id="pasteImageBtn" class="btn">📋 붙여넣기</button>
+        </aside>
+
+        <section class="viewer-panel">
+          <div class="viewer-toolbar">
+            <div class="marker-palette" id="markerPalette"></div>
+            <div class="marker-size-control" id="markerSizeControl">
+              <span class="control-label">마커 크기</span>
+              <button class="size-btn" data-size="sm">S</button>
+              <button class="size-btn" data-size="md">M</button>
+              <button class="size-btn" data-size="lg">L</button>
+            </div>
+            <div class="marker-verse-control">
+              <span class="control-label">절</span>
+              <input type="number" id="markerVerseInput" min="0" max="9" value="0" title="A~G 마커 앞에 붙는 절 번호 (예: 1A, 2A). 0이면 번호 없이 A, B로 표시">
+            </div>
+          </div>
+          <div class="viewer-toolbar viewer-toolbar-2">
+            <div class="image-adjust">
+              <span class="control-label">가로</span>
+              <input type="range" id="imageScaleXRange" min="10" max="400" value="100">
+              <span class="control-label">세로</span>
+              <input type="range" id="imageScaleYRange" min="10" max="400" value="100">
+              <button id="imageFitBtn" class="btn btn-icon-text">비율맞춤</button>
+              <button id="imageResetPosBtn" class="btn btn-icon-text">위치초기화</button>
+            </div>
+            <div class="zoom-controls">
+              <button id="zoomOutBtn" class="btn btn-icon">－</button>
+              <span id="zoomLabel">100%</span>
+              <button id="zoomInBtn" class="btn btn-icon">＋</button>
+            </div>
+          </div>
+          <div class="viewer-toolbar viewer-toolbar-3">
+            <button id="textModeBtn" class="btn" title="악보 위 아무 곳에나 자유 텍스트를 남깁니다">✎ 텍스트 추가</button>
+            <span class="control-label">글자 크기</span>
+            <input type="range" id="textSizeRange" min="10" max="48" value="16">
+            <span class="control-label">배경</span>
+            <select id="textBgSelect">
+              <option value="white">흰색</option>
+              <option value="transparent">투명</option>
+            </select>
+          </div>
+
+          <div class="canvas-scroll" id="canvasScroll">
+            <div class="canvas-sizer" id="canvasSizer">
+              <div class="canvas-wrap" id="canvasWrap">
+                <img id="sheetImage" draggable="false" alt="악보">
+                <div id="textBoxLayer"></div>
+                <div id="markerLayer">
+                  <div class="align-guide align-guide-x hidden" id="guideX"></div>
+                  <div class="align-guide align-guide-y hidden" id="guideY"></div>
+                </div>
+              </div>
+              <div id="resizeHandleLayer"></div>
+            </div>
+          </div>
+          <p class="empty-hint" id="emptyHint">"＋ 이미지 추가" 또는 붙여넣기(Ctrl+V)로 악보를 등록하세요.</p>
+        </section>
+      </div>
+
+      <aside class="workspace-right">
+        <div class="panel-block">
+          <h2>진행 순서 (송폼)</h2>
+          <div class="practice-controls">
+            <button id="prevStepBtn" class="btn">◀</button>
+            <div id="currentStepLabel" class="current-step">-</div>
+            <button id="nextStepBtn" class="btn">▶</button>
+          </div>
+          <div class="songform-pool" id="songformPool"></div>
+          <p class="hint">마커 클릭 → 순서에 추가. 드래그/▲▼로 순서 변경, 박스 크기 조절 가능.</p>
+          <ol class="songform-order" id="songFormList"></ol>
+        </div>
+
+        <div class="panel-block">
+          <h2>메트로놈</h2>
+          <div class="metronome">
+            <div class="bpm-row">
+              <button id="tapTempoBtn" class="btn">TAP</button>
+              <input type="range" id="bpmRange" min="40" max="240" value="90">
+              <input type="number" id="bpmInput" min="40" max="240" value="90">
+              <span class="unit">BPM</span>
+            </div>
+            <div class="beat-row">
+              <select id="beatsPerMeasure">
+                <option value="2">2박</option>
+                <option value="3">3박</option>
+                <option value="4" selected>4박</option>
+                <option value="6">6박</option>
+                <option value="8">8박</option>
+                <option value="12">12박</option>
+              </select>
+              <div id="beatIndicator" class="beat-indicator"></div>
+            </div>
+            <button id="metronomeToggleBtn" class="btn btn-primary metronome-toggle">시작 ▶</button>
+            <label class="check-row"><input type="checkbox" id="tempoPrintToggle" checked> 인쇄물에 템포 표시</label>
+          </div>
+        </div>
+
+        <div class="panel-block">
+          <h2>전달사항</h2>
+          <textarea id="songNotesInput" class="notes-textarea" placeholder="예: 브릿지 두 번째는 낮게, 간주 길게 등"></textarea>
+          <label class="check-row"><input type="checkbox" id="notesPrintToggle" checked> 인쇄물에 표시</label>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============ 3. 인쇄 미리보기 ============ -->
+  <section id="screenPrint" class="screen hidden">
+    <div class="sub-topbar">
+      <button id="printBackBtn" class="btn">◀ 콘티 작업으로</button>
+      <h2>인쇄 미리보기</h2>
+    </div>
+    <div class="print-controls">
+      <label>한 페이지에 악보 몇 개?
+        <input type="number" id="printPerPage" min="1" max="12" value="1">
+      </label>
+      <label>용지 방향
+        <select id="printOrientation">
+          <option value="portrait">세로</option>
+          <option value="landscape">가로</option>
+        </select>
+      </label>
+      <label>진행순서 글자 크기
+        <input type="range" id="printFontSize" min="12" max="32" value="18">
+        <span id="printFontSizeLabel">18px</span>
+      </label>
+      <label>마커 크기(인쇄)
+        <input type="range" id="printMarkerScale" min="50" max="200" value="100">
+        <span id="printMarkerScaleLabel">100%</span>
+      </label>
+      <label>악보 크기
+        <input type="range" id="printImageScale" min="50" max="150" value="100">
+        <span id="printImageScaleLabel">100%</span>
+      </label>
+      <button id="printBuildBtn" class="btn btn-primary">미리보기 생성</button>
+      <button id="printDownloadBtn" class="btn btn-primary" disabled>PDF + PNG 다운로드</button>
+      <span id="printProgress" class="hint"></span>
+    </div>
+    <div class="print-preview-area" id="printPreviewArea">
+      <p class="hint">"미리보기 생성"을 눌러 출력될 페이지를 확인하세요.</p>
+    </div>
+  </section>
+
+</div>
+
+<div class="modal-overlay hidden" id="modalOverlay">
+  <div class="modal-box" id="modalBox"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
