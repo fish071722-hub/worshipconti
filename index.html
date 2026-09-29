@@ -27,6 +27,10 @@
   <section id="screenHome" class="screen">
     <div class="home-topbar">
       <h1>콘티 내게 도와줄께!!</h1>
+      <div class="backup-folder-row">
+        <span id="backupFolderStatus" class="hint">저장 폴더: 확인 중...</span>
+        <button id="backupFolderSetBtn" class="btn btn-icon-text" title="폴더를 지정하면 콘티를 저장할 때마다 악보 이미지와 JSON 백업이 이 폴더에 자동으로 저장됩니다">📁 저장 폴더 설정</button>
+      </div>
     </div>
     <div class="home-columns">
       <div class="home-left">
@@ -137,7 +141,11 @@
             </div>
             <div class="marker-verse-control">
               <span class="control-label">절</span>
-              <input type="number" id="markerVerseInput" min="0" max="9" value="0" title="A~G 마커 앞에 붙는 절 번호 (예: 1A, 2A). 0이면 번호 없이 A, B로 표시">
+              <input type="number" id="markerVerseInput" min="0" max="9" value="0" title="절 번호가 붙는 마커 앞(또는 뒤)에 붙는 번호. 0이면 번호 없이 표시">
+            </div>
+            <div class="marker-scheme-control">
+              <span class="control-label">마커 체계</span>
+              <select id="markerSchemeSelect"></select>
             </div>
           </div>
           <div class="viewer-toolbar viewer-toolbar-2">
@@ -148,6 +156,7 @@
               <input type="range" id="imageScaleYRange" min="10" max="400" value="100">
               <button id="imageFitBtn" class="btn btn-icon-text">비율맞춤</button>
               <button id="imageResetPosBtn" class="btn btn-icon-text">위치초기화</button>
+              <label class="check-row" title="핸들로 크기를 조절할 때 가로세로 비율을 유지합니다"><input type="checkbox" id="imageAspectLockToggle"> 비율 유지</label>
             </div>
             <div class="zoom-controls">
               <button id="zoomOutBtn" class="btn btn-icon">－</button>
@@ -166,6 +175,11 @@
             </select>
           </div>
 
+          <div class="songform-caption-bar" id="songformCaptionBar">
+            <span class="control-label">진행 순서</span>
+            <div class="caption-body" id="captionBodyText" contenteditable="true" spellcheck="false" data-placeholder="마커를 진행 순서에 추가하면 여기에 표시돼요. 클릭해서 직접 수정할 수도 있어요."></div>
+            <button id="captionResetBtn" class="mini-btn hidden" title="자동 생성 문구로 되돌리기">↺ 자동생성</button>
+          </div>
           <div class="canvas-scroll" id="canvasScroll">
             <div class="canvas-sizer" id="canvasSizer">
               <div class="canvas-wrap" id="canvasWrap">
@@ -259,7 +273,9 @@
         <span id="printImageScaleLabel">100%</span>
       </label>
       <button id="printBuildBtn" class="btn btn-primary">미리보기 생성</button>
-      <button id="printDownloadBtn" class="btn btn-primary" disabled>PDF + PNG 다운로드</button>
+      <button id="printDirectBtn" class="btn" disabled>🖨 프린터로 출력</button>
+      <button id="printDownloadPngBtn" class="btn" disabled>🖼 이미지(PNG) 다운로드</button>
+      <button id="printDownloadPdfBtn" class="btn btn-primary" disabled>📄 PDF 다운로드</button>
       <span id="printProgress" class="hint"></span>
     </div>
     <div class="print-preview-area" id="printPreviewArea">

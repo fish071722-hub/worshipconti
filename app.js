@@ -2,23 +2,59 @@
 
 /* ================= 상수 ================= */
 
-const MARKER_TYPES = [
-  { key: "intro",     label: "전주", color: "#6366f1" },
-  { key: "a",         label: "A",   color: "#10b981" },
-  { key: "b",         label: "B",   color: "#0ea5e9" },
-  { key: "c",         label: "C",   color: "#ef4444" },
-  { key: "d",         label: "D",   color: "#f59e0b" },
-  { key: "e",         label: "E",   color: "#8b5cf6" },
-  { key: "f",         label: "F",   color: "#ec4899" },
-  { key: "g",         label: "G",   color: "#14b8a6" },
-  { key: "interlude", label: "간주", color: "#64748b" },
-  { key: "outro",     label: "후주", color: "#92400e" },
-  { key: "star",      label: "★",   color: "#eab308" },
-];
+// 마커 라벨 체계: 프로젝트마다 "한글(전주/A~G/간주/후주)" 또는 "영어(Intro/Verse/...)" 중 선택.
+// verseKeys에 속한 타입만 절 번호(1A, 2A / Verse 1, Verse 2 ...)를 붙일 수 있고,
+// verseFormat이 그 번호를 라벨 앞(prefix)에 붙일지 뒤(suffix)에 붙일지 결정한다.
+const MARKER_SCHEME_DEFS = {
+  kr: {
+    key: "kr",
+    label: "한글 (전주·A~G·간주·후주)",
+    verseFormat: "prefix",
+    verseKeys: ["a", "b", "c", "d", "e", "f", "g"],
+    types: [
+      { key: "intro",     label: "전주", color: "#6366f1" },
+      { key: "a",         label: "A",   color: "#10b981" },
+      { key: "b",         label: "B",   color: "#0ea5e9" },
+      { key: "c",         label: "C",   color: "#ef4444" },
+      { key: "d",         label: "D",   color: "#f59e0b" },
+      { key: "e",         label: "E",   color: "#8b5cf6" },
+      { key: "f",         label: "F",   color: "#ec4899" },
+      { key: "g",         label: "G",   color: "#14b8a6" },
+      { key: "interlude", label: "간주", color: "#64748b" },
+      { key: "outro",     label: "후주", color: "#92400e" },
+      { key: "star",      label: "★",   color: "#eab308" },
+    ],
+  },
+  en: {
+    key: "en",
+    label: "영어 (Intro·Verse·Pre-Chorus·Chorus·Interlude·Bridge·Outro)",
+    verseFormat: "suffix",
+    verseKeys: ["verse"],
+    types: [
+      { key: "intro",     label: "Intro",      color: "#6366f1" },
+      { key: "verse",     label: "Verse",      color: "#10b981" },
+      { key: "prechorus", label: "Pre-Chorus", color: "#0ea5e9" },
+      { key: "chorus",    label: "Chorus",     color: "#ef4444" },
+      { key: "interlude", label: "Interlude",  color: "#64748b" },
+      { key: "bridge",    label: "Bridge",     color: "#8b5cf6" },
+      { key: "outro",     label: "Outro",      color: "#92400e" },
+      { key: "star",      label: "★",          color: "#eab308" },
+    ],
+  },
+};
+const MARKER_SCHEME_LIST = Object.values(MARKER_SCHEME_DEFS);
+
+// 프로젝트 진행 중 스킴을 바꿔도 이미 찍힌 마커를 더블클릭으로 수정할 수 있어야 하므로,
+// 모든 스킴의 타입을 하나로 합친 조회용 맵/집합을 별도로 둔다(같은 key는 첫 정의 사용).
+const ALL_MARKER_TYPES_MAP = new Map();
+MARKER_SCHEME_LIST.forEach((scheme) => {
+  scheme.types.forEach((t) => { if (!ALL_MARKER_TYPES_MAP.has(t.key)) ALL_MARKER_TYPES_MAP.set(t.key, t); });
+});
+const ALL_VERSE_TYPE_KEYS = new Set(MARKER_SCHEME_LIST.flatMap((s) => s.verseKeys));
+
 const TEMPO_LABELS = { slow: "Slow", medium: "Medium", fast: "Fast" };
 
 const MARKER_FONT_BASE = { sm: 11, md: 13, lg: 17 };
-const VERSE_TYPES = ["a", "b", "c", "d", "e", "f", "g"]; // 절 번호(1A, 2A ...)를 붙일 수 있는 마커 타입
 const SERVICE_TYPES = ["주일 2부예배", "금요심야기도회", "부흥사경회", "수련회", "기타"];
 
 const DB_NAME = "WorshipSongPlannerDB";
@@ -138,6 +174,7 @@ let uiState = new Map();        // slotId -> {currentPageId, zoom, practice:{ste
 let placingType = null;
 let placingSize = "md";
 let placingVerse = 0;
+let imageAspectLock = false;
 let pageObjectUrls = new Map();
 let pageRatios = new Map();
 let ghostEl = null;
@@ -159,23 +196,26 @@ const el = {};
 function cacheEls() {
   const ids = [
     "screenHome", "screenWorkspace", "screenPrint",
+    "backupFolderStatus", "backupFolderSetBtn",
     "cpDate", "cpType", "cpCustomWrap", "cpCustom", "cpSongCount",
     "cpSongList", "cpAddSongBtn", "cpConfirmBtn", "cpSearchProject", "cpExistingProjectList",
     "homeLibraryList", "libFilterTitle", "libFilterKey", "libFilterTempo", "libFilterLyrics",
     "wsHomeBtn", "wsProjectName", "wsPrintBtn", "wsBackupExportBtn", "wsImportInput", "wsResetSongBtn", "wsSaveToScoreBtn", "saveStatus",
     "slotTabs", "songTitleInput", "songKeyInput", "songTempoInput", "songLyricsInput",
     "pageList", "addImageInput", "pasteImageBtn",
-    "markerPalette", "markerSizeControl", "markerVerseInput",
-    "imageScaleXRange", "imageScaleYRange", "imageFitBtn", "imageResetPosBtn",
+    "markerPalette", "markerSizeControl", "markerVerseInput", "markerSchemeSelect",
+    "imageScaleXRange", "imageScaleYRange", "imageFitBtn", "imageResetPosBtn", "imageAspectLockToggle",
     "zoomOutBtn", "zoomInBtn", "zoomLabel",
     "textModeBtn", "textSizeRange", "textBgSelect",
+    "songformCaptionBar", "captionBodyText", "captionResetBtn",
     "canvasScroll", "canvasSizer", "canvasWrap", "sheetImage", "markerLayer", "textBoxLayer", "guideX", "guideY",
     "resizeHandleLayer", "emptyHint",
     "songformPool", "prevStepBtn", "nextStepBtn", "currentStepLabel", "songFormList",
     "tapTempoBtn", "bpmRange", "bpmInput", "beatsPerMeasure", "beatIndicator", "metronomeToggleBtn", "tempoPrintToggle",
     "songNotesInput", "notesPrintToggle",
     "printBackBtn", "printPerPage", "printOrientation", "printFontSize", "printFontSizeLabel",
-    "printMarkerScale", "printMarkerScaleLabel", "printImageScale", "printImageScaleLabel", "printBuildBtn", "printDownloadBtn",
+    "printMarkerScale", "printMarkerScaleLabel", "printImageScale", "printImageScaleLabel", "printBuildBtn",
+    "printDirectBtn", "printDownloadPngBtn", "printDownloadPdfBtn",
     "printProgress", "printPreviewArea",
     "modalOverlay", "modalBox",
   ];
@@ -198,6 +238,7 @@ async function goHome() {
   renderCreateForm();
   renderCreateExistingList("");
   renderHomeLibraryList();
+  refreshBackupFolderStatus();
   showScreen("home");
 }
 
@@ -212,7 +253,9 @@ async function goPrint() {
   el.printImageScale.value = settings.imageScale || 100;
   el.printImageScaleLabel.textContent = (settings.imageScale || 100) + "%";
   el.printPreviewArea.innerHTML = '<p class="hint">"미리보기 생성"을 눌러 출력될 페이지를 확인하세요.</p>';
-  el.printDownloadBtn.disabled = true;
+  el.printDirectBtn.disabled = true;
+  el.printDownloadPngBtn.disabled = true;
+  el.printDownloadPdfBtn.disabled = true;
   el.printProgress.textContent = "";
   builtCanvases = [];
   showScreen("print");
@@ -224,6 +267,7 @@ init();
 
 async function init() {
   cacheEls();
+  buildMarkerSchemeSelect();
   buildMarkerPalette();
   buildMarkerSizeControl();
   buildBeatDots(4);
@@ -235,6 +279,8 @@ async function init() {
   bindCreateEvents();
   bindWorkspaceEvents();
   bindPrintEvents();
+  bindCaptionBarEvents();
+  bindBackupFolderEvents();
 
   projectsMeta = await dbGetAllProjects();
   homeLibrarySongsAll = await dbGetAllLibrarySongs();
@@ -242,6 +288,7 @@ async function init() {
   renderCreateForm();
   renderCreateExistingList("");
   renderHomeLibraryList();
+  refreshBackupFolderStatus();
   showScreen("home");
 }
 
@@ -489,12 +536,12 @@ function bindCreateEvents() {
       }
       songSlots.push({
         slotId: uid(), libraryId, songForm: [], metronome: { bpm: 90, beats: 4 }, order: i,
-        notes: "", showTempoInPrint: true, showNotesInPrint: true,
+        notes: "", showTempoInPrint: true, showNotesInPrint: true, songFormTextOverride: "",
       });
     }
 
     const project = {
-      id: uid(), name, date: createDraft.date, serviceType: serviceName,
+      id: uid(), name, date: createDraft.date, serviceType: serviceName, markerScheme: "kr",
       songSlots, exportSettings: { perPage: 1, fontSize: 18, markerScale: 100, imageScale: 100, orientation: "portrait" }, updatedAt: Date.now(),
     };
     await dbPutProject(project);
@@ -565,6 +612,8 @@ function openLibrarySearchModal(onPick) {
 async function enterWorkspace(project) {
   currentProject = project;
   if (!currentProject.exportSettings) currentProject.exportSettings = { perPage: 1, fontSize: 18, markerScale: 100, imageScale: 100, orientation: "portrait" };
+  if (!currentProject.markerScheme) currentProject.markerScheme = "kr";
+  currentProject.songSlots.forEach((s) => { if (s.songFormTextOverride == null) s.songFormTextOverride = ""; });
 
   libraryCache.clear();
   for (const slot of currentProject.songSlots) {
@@ -586,6 +635,7 @@ async function enterWorkspace(project) {
 
   activeSlotId = currentProject.songSlots[0] ? currentProject.songSlots[0].slotId : null;
   placingType = null;
+  buildMarkerPalette();
   updatePaletteActiveState();
   clearPageUrlCache();
   showScreen("workspace");
@@ -621,6 +671,7 @@ const saveLibrarySongDebounced = debounce(async (libraryId) => {
   song.updatedAt = Date.now();
   await dbPutLibrarySong(song);
   flashSaveStatus();
+  autoBackupDebounced();
 }, 300);
 
 const saveProjectDebounced = debounce(async () => {
@@ -630,6 +681,7 @@ const saveProjectDebounced = debounce(async () => {
   const meta = projectsMeta.find((p) => p.id === currentProject.id);
   if (!meta) projectsMeta.push(currentProject);
   flashSaveStatus();
+  autoBackupDebounced();
 }, 300);
 
 function flashSaveStatus() {
@@ -753,6 +805,8 @@ function renderSlotTabs() {
     const song = libraryCache.get(slot.libraryId);
     const tab = document.createElement("div");
     tab.className = "slot-tab" + (slot.slotId === activeSlotId ? " active" : "");
+    tab.draggable = true;
+    tab.title = "드래그해서 곡 순서를 바꿀 수 있어요";
     tab.innerHTML = `<span>${idx + 1}. ${escapeHtml(song && song.title ? song.title : "(제목 없음)")}</span><button class="tab-close" title="곡 제거">×</button>`;
     tab.addEventListener("click", (e) => {
       if (e.target.classList.contains("tab-close")) return;
@@ -768,6 +822,28 @@ function renderSlotTabs() {
       saveProjectDebounced();
       renderWorkspace();
     });
+
+    tab.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", slot.slotId);
+      e.dataTransfer.effectAllowed = "move";
+    });
+    tab.addEventListener("dragover", (e) => { e.preventDefault(); tab.classList.add("drag-over"); });
+    tab.addEventListener("dragleave", () => tab.classList.remove("drag-over"));
+    tab.addEventListener("drop", (e) => {
+      e.preventDefault();
+      tab.classList.remove("drag-over");
+      const draggedId = e.dataTransfer.getData("text/plain");
+      if (!draggedId || draggedId === slot.slotId) return;
+      const slots = currentProject.songSlots;
+      const fromIdx = slots.findIndex((s) => s.slotId === draggedId);
+      const toIdx = slots.findIndex((s) => s.slotId === slot.slotId);
+      if (fromIdx === -1 || toIdx === -1) return;
+      const [moved] = slots.splice(fromIdx, 1);
+      slots.splice(toIdx, 0, moved);
+      saveProjectDebounced();
+      renderSlotTabs();
+    });
+
     el.slotTabs.appendChild(tab);
   });
   const addBtn = document.createElement("button");
@@ -804,7 +880,7 @@ function openAddSongChoiceModal() {
 function addSlotForLibraryId(libraryId) {
   const slot = {
     slotId: uid(), libraryId, songForm: [], metronome: { bpm: 90, beats: 4 }, order: currentProject.songSlots.length,
-    notes: "", showTempoInPrint: true, showNotesInPrint: true,
+    notes: "", showTempoInPrint: true, showNotesInPrint: true, songFormTextOverride: "",
   };
   currentProject.songSlots.push(slot);
   const song = libraryCache.get(libraryId);
@@ -816,9 +892,29 @@ function addSlotForLibraryId(libraryId) {
 
 /* ================= 마커 팔레트 / 크기 ================= */
 
+function currentMarkerScheme() {
+  const key = (currentProject && currentProject.markerScheme) || "kr";
+  return MARKER_SCHEME_DEFS[key] || MARKER_SCHEME_DEFS.kr;
+}
+
+function buildMarkerSchemeSelect() {
+  el.markerSchemeSelect.innerHTML = MARKER_SCHEME_LIST
+    .map((s) => `<option value="${s.key}">${escapeHtml(s.label)}</option>`).join("");
+  el.markerSchemeSelect.addEventListener("change", () => {
+    if (!currentProject) return;
+    currentProject.markerScheme = el.markerSchemeSelect.value;
+    placingType = null;
+    hideGhost(); hideGuides();
+    buildMarkerPalette();
+    updatePaletteActiveState();
+    saveProjectDebounced();
+  });
+}
+
 function buildMarkerPalette() {
   el.markerPalette.innerHTML = "";
-  MARKER_TYPES.forEach((t) => {
+  if (el.markerSchemeSelect) el.markerSchemeSelect.value = currentMarkerScheme().key;
+  currentMarkerScheme().types.forEach((t) => {
     const btn = document.createElement("button");
     btn.className = "marker-type-btn";
     btn.textContent = t.label;
@@ -875,11 +971,30 @@ function buildMarkerSizeControl() {
   el.markerVerseInput.addEventListener("focus", () => el.markerVerseInput.select());
 }
 
+// 절 번호가 붙는 형식: kr 스킴(prefix)은 "1A"처럼 번호가 앞에, en 스킴(suffix)은 "Verse 1"처럼 뒤에 붙는다.
+function formatVerseLabel(typeCfg, verse, format) {
+  if (verse === 0) return typeCfg.label;
+  return format === "suffix" ? `${typeCfg.label} ${verse}` : `${verse}${typeCfg.label}`;
+}
+// 마커가 어느 스킴에 속하는지 몰라도(스킴이 바뀐 뒤에도) 기존 라벨에서 절 번호를 읽어올 수 있도록
+// 라벨 앞/뒤 어느 쪽에 숫자가 있어도 찾아낸다.
+function extractVerseNumber(label) {
+  let m = String(label).match(/(\d+)\s*$/);
+  if (m) return parseInt(m[1], 10);
+  m = String(label).match(/^(\d+)/);
+  return m ? parseInt(m[1], 10) : 0;
+}
+function verseFormatForType(typeKey) {
+  const scheme = MARKER_SCHEME_LIST.find((s) => s.verseKeys.includes(typeKey));
+  return scheme ? scheme.verseFormat : "prefix";
+}
+
 function composeMarkerLabel(typeKey) {
-  const typeCfg = MARKER_TYPES.find((t) => t.key === typeKey);
+  const scheme = currentMarkerScheme();
+  const typeCfg = scheme.types.find((t) => t.key === typeKey);
   if (!typeCfg) return "";
-  if (!VERSE_TYPES.includes(typeKey)) return typeCfg.label;
-  return placingVerse === 0 ? typeCfg.label : `${placingVerse}${typeCfg.label}`;
+  if (!scheme.verseKeys.includes(typeKey)) return typeCfg.label;
+  return formatVerseLabel(typeCfg, placingVerse, scheme.verseFormat);
 }
 
 /* ================= 페이지(이미지) ================= */
@@ -1024,6 +1139,129 @@ async function saveCurrentSongToScoreFolder() {
     setTimeout(() => { el.wsSaveToScoreBtn.textContent = "💾 Score 폴더에 저장"; }, 1800);
   }
 }
+
+/* ================= 자동 백업 폴더(초기화면에서 지정, 저장할 때마다 JSON+악보 자동 기록) ================= */
+
+// Score 폴더 저장과 같은 File System Access API 패턴을 쓰되, 핸들은 별도 키("backupDir")로 보관한다.
+// forcePick=false(자동 저장 시점)일 때는 사용자 동작 없이 조용히 실패해야 하므로 권한 팝업을 띄우지 않고
+// 곧바로 null을 돌려준다 — 그러면 자동 저장은 조용히 건너뛰고, 사용자가 "저장 폴더 설정" 버튼을 다시
+// 눌러야 재개된다(브라우저가 사용자 제스처 없는 requestPermission을 거부할 수 있기 때문).
+async function getBackupDirHandle({ forcePick = false } = {}) {
+  if (!window.showDirectoryPicker) {
+    if (forcePick) alert("이 브라우저는 폴더 저장 기능(File System Access API)을 지원하지 않습니다. 최신 Chrome/Edge에서 이용해주세요.");
+    return null;
+  }
+  if (!forcePick) {
+    try {
+      const saved = await dbGetHandle("backupDir");
+      if (saved && saved.handle) {
+        const perm = await saved.handle.queryPermission({ mode: "readwrite" });
+        if (perm === "granted") return saved.handle;
+      }
+    } catch (err) { /* 무시하고 null 반환 */ }
+    return null;
+  }
+  let handle;
+  try {
+    handle = await window.showDirectoryPicker({ id: "worshipBackupFolder", mode: "readwrite" });
+  } catch (err) {
+    if (err.name !== "AbortError") console.error(err);
+    return null;
+  }
+  try {
+    await dbPutHandle("backupDir", handle);
+  } catch (err) {
+    console.error("백업 폴더 핸들 저장 실패:", err);
+  }
+  return handle;
+}
+
+async function refreshBackupFolderStatus() {
+  try {
+    const saved = await dbGetHandle("backupDir");
+    if (saved && saved.handle) {
+      el.backupFolderStatus.textContent = `저장 폴더: ${saved.handle.name} (자동 저장 켜짐)`;
+      return;
+    }
+  } catch (err) { /* 아래 기본 문구로 표시 */ }
+  el.backupFolderStatus.textContent = "저장 폴더: 미설정 (자동 저장 꺼짐)";
+}
+
+function bindBackupFolderEvents() {
+  el.backupFolderSetBtn.addEventListener("click", async () => {
+    const handle = await getBackupDirHandle({ forcePick: true });
+    if (!handle) return;
+    await refreshBackupFolderStatus();
+    alert(`저장 폴더가 "${handle.name}"(으)로 설정되었습니다. 이제부터 콘티를 저장할 때마다 악보 이미지와 JSON 백업이 이 폴더에 자동으로 저장됩니다.`);
+    if (currentProject) autoBackupDebounced();
+  });
+}
+
+function flashAutoBackupStatus(text) {
+  el.saveStatus.textContent = text;
+  clearTimeout(flashAutoBackupStatus._t);
+  flashAutoBackupStatus._t = setTimeout(() => (el.saveStatus.textContent = ""), 1800);
+}
+
+async function autoBackupProjectToDisk(project) {
+  const dirHandle = await getBackupDirHandle();
+  if (!dirHandle) return;
+  try {
+    const songs = [];
+    for (const slot of project.songSlots) {
+      const song = libraryCache.get(slot.libraryId) || await dbGetLibrarySong(slot.libraryId);
+      if (!song) continue;
+      const pages = await Promise.all(song.pages.map(async (p) => ({
+        markers: p.markers, texts: p.texts || [], imageScaleX: p.imageScaleX, imageScaleY: p.imageScaleY, offsetX: p.offsetX, offsetY: p.offsetY,
+        image: await blobToDataURL(p.blob),
+      })));
+      songs.push({
+        libraryId: song.id, title: song.title, key: song.key,
+        tempo: song.tempo || "", lyricsFirstLine: song.lyricsFirstLine || "", pages,
+      });
+    }
+    const exportObj = {
+      name: project.name, date: project.date, serviceType: project.serviceType,
+      exportSettings: project.exportSettings, markerScheme: project.markerScheme || "kr",
+      songSlots: project.songSlots.map((s) => ({
+        libraryId: s.libraryId, songForm: s.songForm, metronome: s.metronome,
+        notes: s.notes || "", showTempoInPrint: s.showTempoInPrint !== false, showNotesInPrint: s.showNotesInPrint !== false,
+        songFormTextOverride: s.songFormTextOverride || "",
+      })),
+      songs,
+    };
+    const jsonHandle = await dirHandle.getFileHandle(`${sanitizeFilename(project.name)}.json`, { create: true });
+    const jsonWritable = await jsonHandle.createWritable();
+    await jsonWritable.write(JSON.stringify(exportObj));
+    await jsonWritable.close();
+
+    const scoreDir = await dirHandle.getDirectoryHandle("Score", { create: true });
+    for (const slot of project.songSlots) {
+      const song = libraryCache.get(slot.libraryId);
+      if (!song || !song.pages.length) continue;
+      const base = buildScoreFilenameBase(song);
+      const multi = song.pages.length > 1;
+      for (let i = 0; i < song.pages.length; i++) {
+        const page = song.pages[i];
+        const ext = (page.blob.type && page.blob.type.split("/")[1]) || "png";
+        const filename = `${base}${multi ? "_" + (i + 1) : ""}.${ext}`;
+        const fileHandle = await scoreDir.getFileHandle(filename, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(page.blob);
+        await writable.close();
+      }
+    }
+    flashAutoBackupStatus("✓ 폴더에 자동 저장됨");
+  } catch (err) {
+    console.error("자동 백업 실패:", err);
+    flashAutoBackupStatus("⚠ 자동 저장 실패");
+  }
+}
+
+const autoBackupDebounced = debounce(() => {
+  if (!currentProject) return;
+  autoBackupProjectToDisk(currentProject);
+}, 1500);
 
 /* ================= 곡 초기화 / 중복 확인 ================= */
 
@@ -1253,14 +1491,27 @@ function attachResizeHandleDrag(div, handleKey, page) {
     e.preventDefault();
     const box0 = imageBoxForPage(page);
     const right0 = box0.left + box0.width, bottom0 = box0.top + box0.height;
+    const ratio0 = box0.height / box0.width; // 드래그 시작 시점 비율(비율 유지 옵션에 사용)
+    const hasH = handleKey.includes("e") || handleKey.includes("w");
+    const hasV = handleKey.includes("n") || handleKey.includes("s");
 
     const onMove = (ev) => {
       const cur = clientToFrame(ev.clientX, ev.clientY);
-      let { left, top, width, height } = box0;
+      let width = box0.width, height = box0.height;
       if (handleKey.includes("e")) width = clamp(cur.fx - box0.left, MIN_IMAGE_PX, MAX_IMAGE_W);
-      if (handleKey.includes("w")) { width = clamp(right0 - cur.fx, MIN_IMAGE_PX, MAX_IMAGE_W); left = right0 - width; }
+      if (handleKey.includes("w")) width = clamp(right0 - cur.fx, MIN_IMAGE_PX, MAX_IMAGE_W);
       if (handleKey.includes("s")) height = clamp(cur.fy - box0.top, MIN_IMAGE_PX, MAX_IMAGE_H);
-      if (handleKey.includes("n")) { height = clamp(bottom0 - cur.fy, MIN_IMAGE_PX, MAX_IMAGE_H); top = bottom0 - height; }
+      if (handleKey.includes("n")) height = clamp(bottom0 - cur.fy, MIN_IMAGE_PX, MAX_IMAGE_H);
+
+      if (imageAspectLock) {
+        // 가로 방향이 포함된 핸들이면 가로 변화량을 기준으로, 세로만 있으면 세로 변화량을 기준으로
+        // 반대쪽 축을 같은 비율로 맞춘다(모서리 핸들은 가로가 기준).
+        if (hasH) { height = clamp(width * ratio0, MIN_IMAGE_PX, MAX_IMAGE_H); width = height / ratio0; }
+        else if (hasV) { width = clamp(height / ratio0, MIN_IMAGE_PX, MAX_IMAGE_W); height = width * ratio0; }
+      }
+
+      const left = handleKey.includes("w") ? right0 - width : box0.left;
+      const top = handleKey.includes("n") ? bottom0 - height : box0.top;
       page.imageScaleX = (width / FRAME_WIDTH) * 100;
       page.imageScaleY = (height / FRAME_HEIGHT) * 100;
       page.offsetX = left;
@@ -1365,15 +1616,15 @@ function attachMarkerEvents(div, marker, page) {
       clearTimeout(pendingMarkerDelete.timer);
       pendingMarkerDelete = null;
     }
-    if (VERSE_TYPES.includes(marker.type)) {
-      const typeCfg = MARKER_TYPES.find((t) => t.key === marker.type);
-      const parsedVerse = parseInt(marker.label, 10);
-      const currentVerse = isNaN(parsedVerse) ? 0 : parsedVerse;
+    if (ALL_VERSE_TYPE_KEYS.has(marker.type)) {
+      const typeCfg = ALL_MARKER_TYPES_MAP.get(marker.type);
+      const format = verseFormatForType(marker.type);
+      const currentVerse = extractVerseNumber(marker.label);
       const input = prompt(`절 번호를 입력하세요 (0~9, 0이면 번호 없이 표시) — 현재: ${marker.label}`, String(currentVerse));
       if (input === null) return;
       const parsedInput = parseInt(input, 10);
       const verse = clamp(isNaN(parsedInput) ? 0 : parsedInput, 0, 9);
-      marker.label = verse === 0 ? typeCfg.label : `${verse}${typeCfg.label}`;
+      marker.label = formatVerseLabel(typeCfg, verse, format);
     } else {
       const input = prompt("이름 변경", marker.label);
       if (input === null) return;
@@ -1518,7 +1769,7 @@ function openTextEditModal(t, page) {
 
 function showGhost(fx, fy) {
   if (!ghostEl) { ghostEl = document.createElement("div"); el.markerLayer.appendChild(ghostEl); }
-  const typeCfg = MARKER_TYPES.find((t) => t.key === placingType);
+  const typeCfg = ALL_MARKER_TYPES_MAP.get(placingType);
   if (!typeCfg) return;
   const isStar = placingType === "star";
   ghostEl.className = `marker ghost size-${placingSize}${isStar ? " star-marker" : ""}`;
@@ -1560,7 +1811,7 @@ function bindViewerEvents() {
     const { fx, fy } = clientToFrame(e.clientX, e.clientY);
     const snapped = snapPos(fx, fy, page, null);
     const pct = frameToImagePercent(snapped.fx, snapped.fy, page);
-    const typeCfg = MARKER_TYPES.find((t) => t.key === placingType);
+    const typeCfg = ALL_MARKER_TYPES_MAP.get(placingType);
     const marker = { id: uid(), x: pct.x, y: pct.y, type: placingType, label: composeMarkerLabel(placingType), color: typeCfg.color, size: placingSize };
     page.markers.push(marker);
     renderMarkers();
@@ -1623,6 +1874,9 @@ function bindViewerEvents() {
     page.imageScaleY = clamp(parseInt(el.imageScaleYRange.value, 10) || 100, 10, 400);
     layoutCanvas();
     const song = activeLibrarySong(); if (song) saveLibrarySongDebounced(song.id);
+  });
+  el.imageAspectLockToggle.addEventListener("change", () => {
+    imageAspectLock = el.imageAspectLockToggle.checked;
   });
   el.imageFitBtn.addEventListener("click", () => {
     const page = currentPage(); if (!page) return;
@@ -1694,6 +1948,7 @@ function renderSongForm() {
   el.songFormList.innerHTML = "";
   const slot = activeSlot();
   const songForm = slot ? slot.songForm : [];
+  renderCaptionBar();
   if (songForm.length === 0) {
     el.songFormList.innerHTML = '<span class="songform-empty">위 마커 목록을 클릭해 진행 순서를 추가하세요.</span>';
     updateCurrentStepDisplay();
@@ -1863,10 +2118,11 @@ async function exportProjectBackup() {
   }
   const exportObj = {
     name: currentProject.name, date: currentProject.date, serviceType: currentProject.serviceType,
-    exportSettings: currentProject.exportSettings,
+    exportSettings: currentProject.exportSettings, markerScheme: currentProject.markerScheme || "kr",
     songSlots: currentProject.songSlots.map((s) => ({
       libraryId: s.libraryId, songForm: s.songForm, metronome: s.metronome,
       notes: s.notes || "", showTempoInPrint: s.showTempoInPrint !== false, showNotesInPrint: s.showNotesInPrint !== false,
+      songFormTextOverride: s.songFormTextOverride || "",
     })),
     songs,
   };
@@ -1919,13 +2175,14 @@ async function importProjectBackup(e) {
       return {
         slotId: uid(), libraryId: mapping.song.id, songForm, metronome: slot.metronome || { bpm: 90, beats: 4 },
         notes: slot.notes || "", showTempoInPrint: slot.showTempoInPrint !== false, showNotesInPrint: slot.showNotesInPrint !== false,
+        songFormTextOverride: slot.songFormTextOverride || "",
       };
     }).filter(Boolean);
 
     const project = {
       id: uid(), name: (data.name || "가져온 프로젝트") + " (가져옴)",
       date: data.date || new Date().toISOString().slice(0, 10),
-      serviceType: data.serviceType || "",
+      serviceType: data.serviceType || "", markerScheme: data.markerScheme || "kr",
       songSlots, exportSettings: data.exportSettings || { perPage: 1, fontSize: 18, markerScale: 100, imageScale: 100, orientation: "portrait" },
       updatedAt: Date.now(),
     };
@@ -1964,13 +2221,18 @@ function bindPrintEvents() {
     saveProjectDebounced();
 
     el.printBuildBtn.disabled = true;
-    el.printDownloadBtn.disabled = true;
+    el.printDirectBtn.disabled = true;
+    el.printDownloadPngBtn.disabled = true;
+    el.printDownloadPdfBtn.disabled = true;
     el.printProgress.textContent = "이미지를 불러오는 중...";
     try {
       const canvases = await buildPrintCanvases(perPage, fontSizePx, markerScalePct, orientation, imageScalePct, (msg) => { el.printProgress.textContent = msg; });
       renderPrintPreview(canvases);
       el.printProgress.textContent = canvases.length ? `완료! 총 ${canvases.length}페이지` : "인쇄할 악보 페이지가 없습니다.";
-      el.printDownloadBtn.disabled = canvases.length === 0;
+      const hasPages = canvases.length > 0;
+      el.printDirectBtn.disabled = !hasPages;
+      el.printDownloadPngBtn.disabled = !hasPages;
+      el.printDownloadPdfBtn.disabled = !hasPages;
     } catch (err) {
       console.error(err);
       el.printProgress.textContent = "오류가 발생했습니다: " + err.message;
@@ -1979,17 +2241,36 @@ function bindPrintEvents() {
     }
   });
 
-  el.printDownloadBtn.addEventListener("click", async () => {
+  el.printDirectBtn.addEventListener("click", () => {
     if (!builtCanvases.length) return;
-    el.printDownloadBtn.disabled = true;
+    window.print();
+  });
+
+  el.printDownloadPngBtn.addEventListener("click", async () => {
+    if (!builtCanvases.length) return;
+    el.printDownloadPngBtn.disabled = true;
     const safeName = sanitizeFilename(currentProject.name);
-    const orientation = (currentProject.exportSettings && currentProject.exportSettings.orientation) || "portrait";
     try {
       el.printProgress.textContent = "PNG 다운로드 중...";
       for (let i = 0; i < builtCanvases.length; i++) {
         await downloadCanvasPng(builtCanvases[i], `${safeName}_${i + 1}.png`);
         await sleep(200);
       }
+      el.printProgress.textContent = "완료! 다운로드를 확인하세요.";
+    } catch (err) {
+      console.error(err);
+      el.printProgress.textContent = "오류가 발생했습니다: " + err.message;
+    } finally {
+      el.printDownloadPngBtn.disabled = false;
+    }
+  });
+
+  el.printDownloadPdfBtn.addEventListener("click", async () => {
+    if (!builtCanvases.length) return;
+    el.printDownloadPdfBtn.disabled = true;
+    const safeName = sanitizeFilename(currentProject.name);
+    const orientation = (currentProject.exportSettings && currentProject.exportSettings.orientation) || "portrait";
+    try {
       el.printProgress.textContent = "PDF 생성 중...";
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ unit: "pt", format: "a4", orientation });
@@ -2004,7 +2285,7 @@ function bindPrintEvents() {
       console.error(err);
       el.printProgress.textContent = "오류가 발생했습니다: " + err.message;
     } finally {
-      el.printDownloadBtn.disabled = false;
+      el.printDownloadPdfBtn.disabled = false;
     }
   });
 }
@@ -2029,7 +2310,7 @@ function renderPrintPreview(canvases) {
   });
 }
 
-function buildSongFormTextFor(slot, song) {
+function computeAutoSongFormText(slot, song) {
   if (!slot.songForm.length) return "(진행 순서가 비어 있습니다)";
   const allMarkers = song.pages.flatMap((p) => p.markers);
   return slot.songForm.map((item) => {
@@ -2037,6 +2318,48 @@ function buildSongFormTextFor(slot, song) {
     const label = m ? m.label : "?";
     return item.repeat > 1 ? `${label}×${item.repeat}` : label;
   }).join("  →  ");
+}
+// 사용자가 워크스페이스의 진행순서 캡션을 직접 편집하면 songFormTextOverride에 저장되고,
+// 인쇄물도 (곡 마커 목록에서 자동 생성하는 대신) 이 문구를 그대로 사용한다.
+function buildSongFormTextFor(slot, song) {
+  if (slot.songFormTextOverride && slot.songFormTextOverride.trim()) return slot.songFormTextOverride.trim();
+  return computeAutoSongFormText(slot, song);
+}
+
+/* ---- 악보 위 진행순서 캡션 바(인쇄 미리보기와 같은 문구를 작업화면에서 바로 보고 고칠 수 있게) ---- */
+
+function renderCaptionBar() {
+  const slot = activeSlot();
+  const song = activeLibrarySong();
+  if (!slot || !song) { el.captionBodyText.textContent = ""; el.captionResetBtn.classList.add("hidden"); return; }
+  const hasOverride = !!(slot.songFormTextOverride && slot.songFormTextOverride.trim());
+  const display = hasOverride ? slot.songFormTextOverride.trim() : computeAutoSongFormText(slot, song);
+  // 사용자가 지금 편집 중(포커스 상태)이면 커서 위치가 튀지 않도록 다시 쓰지 않는다.
+  if (document.activeElement !== el.captionBodyText) el.captionBodyText.textContent = display;
+  el.captionResetBtn.classList.toggle("hidden", !hasOverride);
+}
+
+function bindCaptionBarEvents() {
+  el.captionBodyText.addEventListener("blur", () => {
+    const slot = activeSlot();
+    const song = activeLibrarySong();
+    if (!slot || !song) return;
+    const text = el.captionBodyText.textContent.replace(/\s+/g, " ").trim();
+    const autoText = computeAutoSongFormText(slot, song);
+    slot.songFormTextOverride = (text && text !== autoText) ? text : "";
+    renderCaptionBar();
+    saveProjectDebounced();
+  });
+  el.captionBodyText.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); el.captionBodyText.blur(); }
+  });
+  el.captionResetBtn.addEventListener("click", () => {
+    const slot = activeSlot();
+    if (!slot) return;
+    slot.songFormTextOverride = "";
+    renderCaptionBar();
+    saveProjectDebounced();
+  });
 }
 
 function wrapTextLines(ctx, text, maxWidth, fontPx, weight) {
